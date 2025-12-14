@@ -61,9 +61,10 @@ def load_env():
 # Загружаем переменные из .env
 env = load_env()
 BOT_TOKEN = os.getenv("BOT_TOKEN") or env.get("BOT_TOKEN", "ВСТАВЬ_СВОЙ_ТОКЕН_ОТ_BOTFATHER")
+CONSULT_CHANNEL_ID = os.getenv("CONSULT_CHANNEL_ID") or env.get("CONSULT_CHANNEL_ID", None)
 MENTOR_NAME = "Гузель Фархутдинова"
 MENTOR_TG = "https://t.me/guzel_farhutdinova"
-CONSULT_LINK = "https://example.com/consult"
+CONSULT_CHANNEL = "https://t.me/+ThJ1fpFJb-VmYzc6"  # Канал для отправки результатов
 CHANNEL_LINK = "https://t.me/farhutdinova_guzel"
 
 # Проверка токена
@@ -82,6 +83,61 @@ if BOT_TOKEN == "ВСТАВЬ_СВОЙ_ТОКЕН_ОТ_BOTFATHER":
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 user_stage = {}
+user_answers = {}  # Хранилище ответов пользователей
+
+# Маппинг ответов на читаемый текст
+ANSWERS_MAP = {
+    "s1_a": "🕓 Работаю много, но результата не вижу",
+    "s1_b": "💰 Доход есть, но хочется больше свободы",
+    "s1_c": "🚀 Хочу стартовать, но не знаю с чего начать",
+    "s2_a": "🧭 Развитие и рост",
+    "s2_b": "💫 Возможности и свобода",
+    "s2_c": "🤝 Помогать другим и быть примером",
+    "s3_a": "💥 Действовать, даже если страшно",
+    "s3_b": "⏳ Ждать идеального момента",
+    "s4_a": "🔥 Всё",
+    "s4_b": "🌿 Я бы стал(а) увереннее",
+    "s4_c": "🌍 Мог(ла) бы влиять и развиваться"
+}
+
+# Функция для форматирования результатов опроса
+def format_survey_results(user_id: int, user: types.User, answers: dict) -> str:
+    """Форматирует результаты опроса в красивый шаблон"""
+    username = user.username or "не указан"
+    name = user.first_name or ""
+    if user.last_name:
+        name += f" {user.last_name}"
+    
+    result = f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 *НОВАЯ ЗАЯВКА НА КОНСУЛЬТАЦИЮ*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 *Контакт:*
+• Имя: {name}
+• Username: @{username}
+• ID: `{user_id}`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 *РЕЗУЛЬТАТЫ ОПРОСА*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1️⃣ *Текущая ситуация:*
+{ANSWERS_MAP.get(answers.get('step1', ''), 'Не указано')}
+
+2️⃣ *Что вдохновляет:*
+{ANSWERS_MAP.get(answers.get('step2', ''), 'Не указано')}
+
+3️⃣ *Подход к действиям:*
+{ANSWERS_MAP.get(answers.get('step3', ''), 'Не указано')}
+
+4️⃣ *Ожидаемые изменения:*
+{ANSWERS_MAP.get(answers.get('step4', ''), 'Не указано')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💬 Связаться: @{username}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+    
+    return result
 
 # ======================================================
 # 🧱 Вспомогательная функция
@@ -121,7 +177,9 @@ async def later(callback: types.CallbackQuery):
 # STEP 1
 @dp.callback_query(lambda c: c.data == "start_game")
 async def step1(callback: types.CallbackQuery):
-    user_stage[callback.from_user.id] = 1
+    user_id = callback.from_user.id
+    user_stage[user_id] = 1
+    user_answers[user_id] = {}  # Инициализируем хранилище ответов
     text = "У каждого лидера есть отправная точка.\nКакая ситуация у тебя сейчас?"
     kb = make_keyboard([
         ("🕓 Работаю много, но результата не вижу", "s1_a"),
@@ -134,7 +192,9 @@ async def step1(callback: types.CallbackQuery):
 # STEP 2
 @dp.callback_query(lambda c: c.data.startswith("s1_"))
 async def step2(callback: types.CallbackQuery):
-    user_stage[callback.from_user.id] = 2
+    user_id = callback.from_user.id
+    user_stage[user_id] = 2
+    user_answers[user_id]["step1"] = callback.data  # Сохраняем ответ
     text = (
         "Чтобы выйти на уровень уверенности, важно понимать — что тобой движет 💡\n\n"
         "Что вдохновляет тебя сильнее всего?"
@@ -150,7 +210,9 @@ async def step2(callback: types.CallbackQuery):
 # STEP 3
 @dp.callback_query(lambda c: c.data.startswith("s2_"))
 async def step3(callback: types.CallbackQuery):
-    user_stage[callback.from_user.id] = 3
+    user_id = callback.from_user.id
+    user_stage[user_id] = 3
+    user_answers[user_id]["step2"] = callback.data  # Сохраняем ответ
     text = (
         "Большинство людей ограничивают себя мыслями «я не смогу» или «позже».\n"
         "А лидер смотрит иначе 🌍\n\n"
@@ -166,7 +228,9 @@ async def step3(callback: types.CallbackQuery):
 # STEP 4
 @dp.callback_query(lambda c: c.data in ["s3_a", "s3_b"])
 async def step4(callback: types.CallbackQuery):
-    user_stage[callback.from_user.id] = 4
+    user_id = callback.from_user.id
+    user_stage[user_id] = 4
+    user_answers[user_id]["step3"] = callback.data  # Сохраняем ответ
     feedback = (
         "Вот это настрой лидера 🔥" if callback.data == "s3_a"
         else "Знаешь, идеального момента не будет. Иногда рост начинается с простого шага 💪"
@@ -187,7 +251,9 @@ async def step4(callback: types.CallbackQuery):
 # STEP 5
 @dp.callback_query(lambda c: c.data.startswith("s4_"))
 async def step5(callback: types.CallbackQuery):
-    user_stage[callback.from_user.id] = 5
+    user_id = callback.from_user.id
+    user_stage[user_id] = 5
+    user_answers[user_id]["step4"] = callback.data  # Сохраняем ответ
     text = (
         "Вот этот образ — твоя цель 💎\n\n"
         "Теперь важно понять, какие шаги и инструменты помогут тебе достичь "
@@ -197,13 +263,69 @@ async def step5(callback: types.CallbackQuery):
         "Выбери формат 👇"
     )
     kb = InlineKeyboardBuilder()
-    kb.button(text="🗓 Записаться на консультацию", url=CONSULT_LINK)
+    kb.button(text="🗓 Записаться на консультацию", callback_data="send_to_channel")
     kb.button(text=f"💬 Написать {MENTOR_NAME}", url=MENTOR_TG)
     kb.button(text="📲 Подписаться на канал", url=CHANNEL_LINK)
     # Каждая кнопка в отдельном ряду (width=1) - чтобы текст не обрезался
     kb.adjust(1)
     await callback.message.edit_text(text, reply_markup=kb.as_markup())
     await callback.answer()
+
+# Обработчик кнопки "Записаться на консультацию"
+@dp.callback_query(lambda c: c.data == "send_to_channel")
+async def send_to_channel(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    
+    # Проверяем, что все ответы собраны
+    if user_id not in user_answers or len(user_answers[user_id]) < 4:
+        await callback.answer("❌ Ошибка: не все ответы собраны", show_alert=True)
+        return
+    
+    try:
+        # Форматируем результаты
+        results_text = format_survey_results(
+            user_id, 
+            callback.from_user, 
+            user_answers[user_id]
+        )
+        
+        # Отправляем в канал
+        if CONSULT_CHANNEL_ID:
+            # Используем ID канала из .env
+            channel_id = int(CONSULT_CHANNEL_ID)
+            await bot.send_message(
+                chat_id=channel_id,
+                text=results_text,
+                parse_mode="Markdown"
+            )
+        else:
+            # Пробуем отправить по ссылке (может не работать для приватных каналов)
+            # В этом случае нужно добавить CONSULT_CHANNEL_ID в .env
+            await callback.answer(
+                "❌ Ошибка: не указан ID канала. Добавьте CONSULT_CHANNEL_ID в .env",
+                show_alert=True
+            )
+            return
+        
+        # Подтверждаем пользователю
+        await callback.answer("✅ Ваша заявка отправлена! С вами свяжутся в ближайшее время 🚀", show_alert=True)
+        
+        # Обновляем сообщение
+        text = (
+            "✅ *Отлично! Твоя заявка отправлена* 🎉\n\n"
+            f"{MENTOR_NAME} получит результаты твоего опроса и свяжется с тобой "
+            "в ближайшее время для консультации 💫\n\n"
+            "А пока можешь подписаться на канал и узнать больше 👇"
+        )
+        kb = InlineKeyboardBuilder()
+        kb.button(text=f"💬 Написать {MENTOR_NAME}", url=MENTOR_TG)
+        kb.button(text="📲 Подписаться на канал", url=CHANNEL_LINK)
+        kb.adjust(1)
+        await callback.message.edit_text(text, reply_markup=kb.as_markup(), parse_mode="Markdown")
+        
+    except Exception as e:
+        print(f"Ошибка при отправке в канал: {e}")
+        await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
 
 # Завершение
 @dp.message(Command("thanks"))
