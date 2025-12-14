@@ -1,347 +1,282 @@
-import sys
-import subprocess
-import importlib
+# -*- coding: utf-8 -*-
+"""
+Wellness Quest Bot 💎
+Игровой телеграм‑бот с сертификатом‑скидкой, рейтингом и соц‑механиками.
+"""
+
 import asyncio
-
-# ======================================================
-# 1️⃣ УСТАНОВКА / ПРОВЕРКА AIOGRAM
-# ======================================================
-required_stable = "3.10"
-package_name = "aiogram"
-
-def install_aiogram():
-    py_ver = sys.version_info
-    print(f"🧩 Проверка окружения: Python {py_ver.major}.{py_ver.minor}")
-    try:
-        # для Python 3.13+ берём dev-ветку
-        if py_ver.major == 3 and py_ver.minor > 12:
-            print("⚙️ Устанавливается dev‑версия aiogram (совместимая с Python 3.13–3.14)…")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "git+https://github.com/aiogram/aiogram.git@dev-3.x"])
-        else:
-            print(f"⚙️ Устанавливается стабильная версия aiogram {required_stable}…")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", f"{package_name}=={required_stable}"])
-    except subprocess.CalledProcessError as e:
-        print("❌ Не удалось установить aiogram:", e)
-        sys.exit(1)
-
-try:
-    import aiogram
-    if not aiogram.__version__.startswith("3"):
-        print(f"⚠️ Установлена несовместимая версия aiogram {aiogram.__version__} → переустанавливаю…")
-        install_aiogram()
-        importlib.reload(aiogram)
-except ImportError:
-    print("📦 aiogram не найден — выполняется установка…")
-    install_aiogram()
-
-# ======================================================
-# 2️⃣ ДАЛЕЕ — КОД БОТА
-# ======================================================
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-
-# ⚙️ Настройки
 import os
+import io
+import random
+import requests
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from aiogram.filters import Command
+from aiogram.client.default import DefaultBotProperties
+from dotenv import load_dotenv
+import aiojobs
 
-# Функция для чтения .env файла
-def load_env():
-    env_vars = {}
-    if os.path.exists(".env"):
-        with open(".env", "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    # Убираем кавычки если есть
-                    value = value.strip('"').strip("'")
-                    env_vars[key.strip()] = value
-    return env_vars
+# === НАСТРОЙКИ ===
+load_dotenv()
 
-# Загружаем переменные из .env
-env = load_env()
-BOT_TOKEN = os.getenv("BOT_TOKEN") or env.get("BOT_TOKEN", "ВСТАВЬ_СВОЙ_ТОКЕН_ОТ_BOTFATHER")
-CONSULT_CHANNEL_ID = os.getenv("CONSULT_CHANNEL_ID") or env.get("CONSULT_CHANNEL_ID", None)
-MENTOR_NAME = "Гузель Фархутдинова"
-MENTOR_TG = "https://t.me/guzel_farhutdinova"
-CONSULT_CHANNEL = "https://t.me/+ThJ1fpFJb-VmYzc6"  # Канал для отправки результатов
-CHANNEL_LINK = "https://t.me/farhutdinova_guzel"
+# Функция для чтения переменных из .env с удалением кавычек
+def get_env(key, default=None):
+    value = os.getenv(key, default)
+    if value and isinstance(value, str):
+        value = value.strip('"').strip("'")
+    return value
 
-# Проверка токена
-if BOT_TOKEN == "ВСТАВЬ_СВОЙ_ТОКЕН_ОТ_BOTFATHER":
-    print("❌ ОШИБКА: Не указан токен бота!")
-    print("📝 Как получить токен:")
-    print("   1. Откройте Telegram и найдите @BotFather")
-    print("   2. Отправьте команду /newbot")
-    print("   3. Следуйте инструкциям")
-    print("   4. Скопируйте полученный токен")
-    print("\n💡 Затем:")
-    print("   - Вставьте токен в код (строка 45), ИЛИ")
-    print("   - Установите переменную окружения: $env:BOT_TOKEN='ваш_токен'")
-    sys.exit(1)
+BOT_TOKEN = get_env("BOT_TOKEN")
+CHANNEL_ID = get_env("CHANNEL_ID")
+AMO_DOMAIN = get_env("AMO_DOMAIN")
+AMO_TOKEN = get_env("AMO_TOKEN")
 
-bot = Bot(token=BOT_TOKEN)
+if not BOT_TOKEN:
+    print("❌ ОШИБКА: BOT_TOKEN не найден в .env файле!")
+    exit(1)
+
+# Преобразуем CHANNEL_ID в int, если он указан
+if CHANNEL_ID:
+    try:
+        CHANNEL_ID = int(CHANNEL_ID)
+    except ValueError:
+        print(f"⚠️ ВНИМАНИЕ: CHANNEL_ID '{CHANNEL_ID}' не является числом!")
+        CHANNEL_ID = None
+
+bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
 dp = Dispatcher()
-user_stage = {}
-user_answers = {}  # Хранилище ответов пользователей
 
-# Маппинг ответов на читаемый текст
-ANSWERS_MAP = {
-    "s1_a": "🕓 Работаю много, но результата не вижу",
-    "s1_b": "💰 Доход есть, но хочется больше свободы",
-    "s1_c": "🚀 Хочу стартовать, но не знаю с чего начать",
-    "s2_a": "🧭 Развитие и рост",
-    "s2_b": "💫 Возможности и свобода",
-    "s2_c": "🤝 Помогать другим и быть примером",
-    "s3_a": "💥 Действовать, даже если страшно",
-    "s3_b": "⏳ Ждать идеального момента",
-    "s4_a": "🔥 Всё",
-    "s4_b": "🌿 Я бы стал(а) увереннее",
-    "s4_c": "🌍 Мог(ла) бы влиять и развиваться"
-}
+# === ВРЕМЕННОЕ «ХРАНИЛИЩЕ» ===
+users = {}  # user_id -> {name, role, points}
+jobs_manager = None
 
-# Функция для форматирования результатов опроса
-def format_survey_results(user_id: int, user: types.User, answers: dict) -> str:
-    """Форматирует результаты опроса в красивый шаблон"""
-    username = user.username or "не указан"
-    name = user.first_name or ""
-    if user.last_name:
-        name += f" {user.last_name}"
+# === ХЕЛПЕРЫ ===
+def get_user(id, name='User'):
+    if id not in users:
+        users[id] = {"name": name, "role": None, "points": 0}
+    return users[id]
+
+def add_points(id, plus):
+    u = get_user(id)
+    u["points"] = min(u["points"] + plus, 20)
+    return u["points"]
+
+def progress_bar(points):
+    filled = points // 5
+    return f"Прогресс: {'💎' * filled}{'▫️' * (4 - filled)}\nСкидка: *{points}%*"
+
+async def send_to_amocrm(name, username, role, points):
+    if not AMO_DOMAIN or not AMO_TOKEN:
+        return
+    try:
+        url = f"https://{AMO_DOMAIN}/api/v4/leads"
+        headers = {"Authorization": f"Bearer {AMO_TOKEN}"}
+        data = [{
+            "name": f"{role.upper()} — {name}",
+            "custom_fields_values": [
+                {"field_name": "Telegram", "values": [{"value": username}]},
+                {"field_name": "Points", "values": [{"value": points}]}
+            ]
+        }]
+        requests.post(url, json=data, headers=headers, timeout=5)
+    except Exception as e:
+        print("AmoCRM error:", e)
+
+# === СЕРТИФИКАТ КАК PNG ===
+def generate_certificate(name, points, role):
+    # Ленивая загрузка PIL только когда нужно генерировать сертификат
+    from PIL import Image, ImageDraw, ImageFont
     
-    result = f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 *НОВАЯ ЗАЯВКА НА КОНСУЛЬТАЦИЮ*
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-👤 *Контакт:*
-• Имя: {name}
-• Username: @{username}
-• ID: `{user_id}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 *РЕЗУЛЬТАТЫ ОПРОСА*
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-1️⃣ *Текущая ситуация:*
-{ANSWERS_MAP.get(answers.get('step1', ''), 'Не указано')}
-
-2️⃣ *Что вдохновляет:*
-{ANSWERS_MAP.get(answers.get('step2', ''), 'Не указано')}
-
-3️⃣ *Подход к действиям:*
-{ANSWERS_MAP.get(answers.get('step3', ''), 'Не указано')}
-
-4️⃣ *Ожидаемые изменения:*
-{ANSWERS_MAP.get(answers.get('step4', ''), 'Не указано')}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💬 Связаться: @{username}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+    width, height = 800, 450
+    img = Image.new("RGB", (width, height), color=(230, 248, 245))
+    draw = ImageDraw.Draw(img)
     
-    return result
+    # Используем дефолтный шрифт, если системный не найден
+    try:
+        title_font = ImageFont.truetype("arial.ttf", 34)
+        body_font = ImageFont.truetype("arial.ttf", 24)
+    except:
+        try:
+            title_font = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 34)
+            body_font = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 24)
+        except:
+            title_font = ImageFont.load_default()
+            body_font = ImageFont.load_default()
+    
+    # Фон уже установлен при создании изображения
+    draw.text((50, 80), "WELLNESS QUEST CERTIFICATE", font=title_font, fill=(0, 100, 90))
+    draw.text((60, 150), f"Имя: {name}", font=body_font, fill=(10, 30, 30))
+    draw.text((60, 190), f"Роль: {'Партнёр' if role == 'partner' else 'Потребитель'}", font=body_font, fill=(10, 30, 30))
+    draw.text((60, 230), f"Бриллиантов 💎: {points}", font=body_font, fill=(0, 150, 130))
+    draw.text((60, 270), f"Бонус / скидка: {points}% 🇨🇦", font=body_font, fill=(0, 120, 100))
+    draw.text((60, 340), "Поздравляем и желаем здоровья и энергии 🌿", font=body_font, fill=(0, 120, 100))
+    
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    buf.seek(0)
+    return buf
 
-# ======================================================
-# 🧱 Вспомогательная функция
-# ======================================================
-def make_keyboard(options):
-    kb = InlineKeyboardBuilder()
-    for text, cb in options:
-        kb.button(text=text, callback_data=cb)
-    # Каждая кнопка в отдельном ряду (width=1) - чтобы текст не обрезался
-    kb.adjust(1)
-    return kb.as_markup()
+# === КОМАНДЫ ===
 
-# ======================================================
-# 💬 Логика квеста
-# ======================================================
-
+# /start
 @dp.message(Command("start"))
-async def start(message: types.Message):
-    text = (
-        f"Привет, {message.from_user.first_name}! 👋\n\n"
-        f"Я — {MENTOR_NAME}, и ты попал(а) в мини‑квест *«Твоя точка роста»*.\n\n"
-        "Всего 5 коротких шагов помогут увидеть, где ты сейчас "
-        "и что поможет выйти на уровень уверенности, свободы и роста 💎\n\n"
-        "Готов начать?"
-    )
-    kb = make_keyboard([
-        ("🚀 Да, стартуем", "start_game"),
-        ("⏸ Не сейчас", "later")
-    ])
-    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
-
-@dp.callback_query(lambda c: c.data == "later")
-async def later(callback: types.CallbackQuery):
-    await callback.message.edit_text("💫 Возвращайся, когда будешь готов(а) к росту 🌿")
-    await callback.answer()
-
-# STEP 1
-@dp.callback_query(lambda c: c.data == "start_game")
-async def step1(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    user_stage[user_id] = 1
-    user_answers[user_id] = {}  # Инициализируем хранилище ответов
-    text = "У каждого лидера есть отправная точка.\nКакая ситуация у тебя сейчас?"
-    kb = make_keyboard([
-        ("🕓 Работаю много, но результата не вижу", "s1_a"),
-        ("💰 Доход есть, но хочется больше свободы", "s1_b"),
-        ("🚀 Хочу стартовать, но не знаю с чего начать", "s1_c")
-    ])
-    await callback.message.edit_text(text, reply_markup=kb)
-    await callback.answer()
-
-# STEP 2
-@dp.callback_query(lambda c: c.data.startswith("s1_"))
-async def step2(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    user_stage[user_id] = 2
-    user_answers[user_id]["step1"] = callback.data  # Сохраняем ответ
-    text = (
-        "Чтобы выйти на уровень уверенности, важно понимать — что тобой движет 💡\n\n"
-        "Что вдохновляет тебя сильнее всего?"
-    )
-    kb = make_keyboard([
-        ("🧭 Развитие и рост", "s2_a"),
-        ("💫 Возможности и свобода", "s2_b"),
-        ("🤝 Помогать другим и быть примером", "s2_c")
-    ])
-    await callback.message.edit_text(text, reply_markup=kb)
-    await callback.answer()
-
-# STEP 3
-@dp.callback_query(lambda c: c.data.startswith("s2_"))
-async def step3(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    user_stage[user_id] = 3
-    user_answers[user_id]["step2"] = callback.data  # Сохраняем ответ
-    text = (
-        "Большинство людей ограничивают себя мыслями «я не смогу» или «позже».\n"
-        "А лидер смотрит иначе 🌍\n\n"
-        "Что ты чаще выбираешь?"
-    )
-    kb = make_keyboard([
-        ("💥 Действовать, даже если страшно", "s3_a"),
-        ("⏳ Ждать идеального момента", "s3_b")
-    ])
-    await callback.message.edit_text(text, reply_markup=kb)
-    await callback.answer()
-
-# STEP 4
-@dp.callback_query(lambda c: c.data in ["s3_a", "s3_b"])
-async def step4(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    user_stage[user_id] = 4
-    user_answers[user_id]["step3"] = callback.data  # Сохраняем ответ
-    feedback = (
-        "Вот это настрой лидера 🔥" if callback.data == "s3_a"
-        else "Знаешь, идеального момента не будет. Иногда рост начинается с простого шага 💪"
-    )
-    text = (
-        f"{feedback}\n\n"
-        "Теперь представь: что бы изменилось в твоей жизни, если бы "
-        "ты уже жил(а) в свободном ритме, занимаясь тем, что вдохновляет?"
-    )
-    kb = make_keyboard([
-        ("🔥 Всё", "s4_a"),
-        ("🌿 Я бы стал(а) увереннее", "s4_b"),
-        ("🌍 Мог(ла) бы влиять и развиваться", "s4_c")
-    ])
-    await callback.message.edit_text(text, reply_markup=kb)
-    await callback.answer()
-
-# STEP 5
-@dp.callback_query(lambda c: c.data.startswith("s4_"))
-async def step5(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    user_stage[user_id] = 5
-    user_answers[user_id]["step4"] = callback.data  # Сохраняем ответ
-    text = (
-        "Вот этот образ — твоя цель 💎\n\n"
-        "Теперь важно понять, какие шаги и инструменты помогут тебе достичь "
-        "этого состояния уверенности и свободы.\n\n"
-        f"Следующий шаг — мини‑консультация с {MENTOR_NAME}, "
-        "где мы разберём твою стратегию роста 🚀\n\n"
-        "Выбери формат 👇"
-    )
-    kb = InlineKeyboardBuilder()
-    kb.button(text="🗓 Записаться на консультацию", callback_data="send_to_channel")
-    kb.button(text=f"💬 Написать {MENTOR_NAME}", url=MENTOR_TG)
-    kb.button(text="📲 Подписаться на канал", url=CHANNEL_LINK)
-    # Каждая кнопка в отдельном ряду (width=1) - чтобы текст не обрезался
-    kb.adjust(1)
-    await callback.message.edit_text(text, reply_markup=kb.as_markup())
-    await callback.answer()
-
-# Обработчик кнопки "Записаться на консультацию"
-@dp.callback_query(lambda c: c.data == "send_to_channel")
-async def send_to_channel(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
+async def start_cmd(msg: Message):
+    chat_id = msg.chat.id
+    name = msg.from_user.first_name or "Друг"
     
-    # Проверяем, что все ответы собраны
-    if user_id not in user_answers or len(user_answers[user_id]) < 4:
-        await callback.answer("❌ Ошибка: не все ответы собраны", show_alert=True)
+    users[chat_id] = {"name": name, "role": None, "points": 0}
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💚 Прокачать здоровье", callback_data="consumer")],
+        [InlineKeyboardButton(text="💰 Хочу доход онлайн", callback_data="partner")]
+    ])
+    
+    await msg.answer(
+        f"Привет, {name}! 👋\nДобро пожаловать в *Wellness Quest* 💎\n\n"
+        "Здесь можно:\n💚 улучшить самочувствие и получить скидку\n"
+        "💰 узнать, как создать доход онлайн\n\nВыбирай направление 👇",
+        reply_markup=kb
+    )
+
+# === ВЫБОР РОЛИ ===
+@dp.callback_query(F.data.in_({"consumer", "partner"}))
+async def choose_role(call: CallbackQuery):
+    chat_id = call.message.chat.id
+    user = get_user(chat_id, call.from_user.first_name)
+    
+    user["role"] = call.data
+    add_points(chat_id, 5)
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Подписаться на wellness‑канал", url="https://t.me/your_channel")],
+        [InlineKeyboardButton(text="▶️ Начать игру", callback_data="quiz1")]
+    ])
+    
+    await call.message.edit_text(
+        f"Ты получил 5 бриллиантов 💎 за старт!\n\n{progress_bar(user['points'])}",
+        reply_markup=kb
+    )
+    await call.answer()
+
+# === ВИКТОРИНА ===
+QUIZZES = [
+    "💧 Сколько воды ты пьёшь в день?",
+    "😴 Высыпаешься ли ночью?",
+    "🥗 Есть ли овощи и фрукты в рационе?",
+    "🚶 Двигаешься ли хотя бы 30 минут в день?"
+]
+
+@dp.callback_query(F.data.startswith("quiz"))
+async def quiz_handler(call: CallbackQuery):
+    chat_id = call.message.chat.id
+    user = get_user(chat_id)
+    
+    step = int(call.data.replace("quiz", ""))
+    if step > len(QUIZZES):
+        await finish_quest(chat_id)
+        await call.answer()
         return
     
-    try:
-        # Форматируем результаты
-        results_text = format_survey_results(
-            user_id, 
-            callback.from_user, 
-            user_answers[user_id]
-        )
-        
-        # Отправляем в канал
-        if CONSULT_CHANNEL_ID:
-            # Используем ID канала из .env
-            channel_id = int(CONSULT_CHANNEL_ID)
-            await bot.send_message(
-                chat_id=channel_id,
-                text=results_text,
-                parse_mode="Markdown"
-            )
-        else:
-            # Пробуем отправить по ссылке (может не работать для приватных каналов)
-            # В этом случае нужно добавить CONSULT_CHANNEL_ID в .env
-            await callback.answer(
-                "❌ Ошибка: не указан ID канала. Добавьте CONSULT_CHANNEL_ID в .env",
-                show_alert=True
-            )
-            return
-        
-        # Подтверждаем пользователю
-        await callback.answer("✅ Ваша заявка отправлена! С вами свяжутся в ближайшее время 🚀", show_alert=True)
-        
-        # Обновляем сообщение
-        text = (
-            "✅ *Отлично! Твоя заявка отправлена* 🎉\n\n"
-            f"{MENTOR_NAME} получит результаты твоего опроса и свяжется с тобой "
-            "в ближайшее время для консультации 💫\n\n"
-            "А пока можешь подписаться на канал и узнать больше 👇"
-        )
-        kb = InlineKeyboardBuilder()
-        kb.button(text=f"💬 Написать {MENTOR_NAME}", url=MENTOR_TG)
-        kb.button(text="📲 Подписаться на канал", url=CHANNEL_LINK)
-        kb.adjust(1)
-        await callback.message.edit_text(text, reply_markup=kb.as_markup(), parse_mode="Markdown")
-        
-    except Exception as e:
-        print(f"Ошибка при отправке в канал: {e}")
-        await callback.answer("❌ Произошла ошибка. Попробуйте позже.", show_alert=True)
-
-# Завершение
-@dp.message(Command("thanks"))
-async def thanks(message: types.Message):
-    await message.answer(
-        f"🔥 Отлично, {message.from_user.first_name}!\n"
-        "Ты прошёл(ла) квест «Твоя точка роста» и сделал(а) первый шаг к новому уровню 💪\n"
-        f"Сила — в действии! 🤍\n\n{MENTOR_NAME}"
+    q = QUIZZES[step - 1]
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Да", callback_data=f"quiz{step + 1}"),
+            InlineKeyboardButton(text="❌ Нет", callback_data=f"quiz{step + 1}")
+        ]
+    ])
+    
+    await call.message.edit_text(
+        f"{q}\n\n{progress_bar(user['points'])}",
+        reply_markup=kb
     )
+    await call.answer()
 
-# ======================================================
-# ▶️ Старт
-# ======================================================
+# === ФИНАЛ КВЕСТА ===
+async def finish_quest(chat_id):
+    u = get_user(chat_id)
+    add_points(chat_id, 15)
+    
+    # Анимация роста
+    for p in range(5, 21, 5):
+        await bot.send_message(chat_id, f"✨ Считаем бриллианты...\n{progress_bar(p)}")
+        await asyncio.sleep(0.4)
+    
+    certificate = generate_certificate(u["name"], u["points"], u["role"])
+    link = "https://your_ref_link.coralmembership.com" if u["role"] == "consumer" else "https://t.me/your_partner_chat"
+    caption = (
+        f"🎉 Поздравляем, {u['name']}!\nТы собрал 20 бриллиантов 💎 и получил 20 % скидки 🇨🇦"
+        if u["role"] == "consumer"
+        else f"🚀 Поздравляем, {u['name']}!\nТы собрал 20 бриллиантов 💎 и стал Ambassador PRO 💼"
+    )
+    
+    await send_to_amocrm(u["name"], str(chat_id), u["role"], u["points"])
+    
+    photo = FSInputFile(certificate, filename="certificate.png")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💎 Активировать бонус", url=link)],
+        [InlineKeyboardButton(text="💬 Поделиться сертификатом", callback_data=f"share_{chat_id}")],
+        [InlineKeyboardButton(text="📊 Рейтинг", callback_data="rating")]
+    ])
+    
+    await bot.send_photo(chat_id, photo, caption=caption, reply_markup=kb)
+
+# === СОЦИАЛЬНЫЕ МЕХАНИКИ ===
+@dp.callback_query(F.data.startswith("share_"))
+async def cb_share(call: CallbackQuery):
+    chat_id = call.message.chat.id
+    u = get_user(chat_id)
+    bot_username = (await bot.get_me()).username
+    share_text = f"Я прошёл Wellness Quest и получил {u['points']} бриллиантов 💎!\nПопробуй и ты 👉 t.me/{bot_username}"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Поделиться", switch_inline_query=share_text)]
+    ])
+    
+    await call.message.answer("Поделись результатом 👇", reply_markup=kb)
+    await call.answer()
+
+@dp.callback_query(F.data == "rating")
+async def cb_rating(call: CallbackQuery):
+    chat_id = call.message.chat.id
+    
+    top = sorted(users.values(), key=lambda x: x["points"], reverse=True)[:5]
+    msg_txt = "🏆 *ТОП‑5 бриллиантовых героев:*\n\n"
+    for i, u in enumerate(top, start=1):
+        msg_txt += f"{i}. {u['name']} — {u['points']} 💎\n"
+    
+    await call.message.answer(msg_txt)
+    await call.answer()
+
+# === ЕЖЕДНЕВНЫЙ WELLNESS‑БОСТ ===
+MESSAGES = [
+    "💧 Пора выпить воду и зарядиться энергией!",
+    "🌿 Сделай 5 глубоких вдохов!",
+    "☀️ Проверь осанку и улыбнись 😄"
+]
+
+async def daily_broadcast(bot: Bot):
+    while True:
+        text = random.choice(MESSAGES)
+        for chat_id in list(users.keys()):
+            try:
+                await bot.send_message(chat_id, text)
+            except:
+                continue
+        await asyncio.sleep(24 * 60 * 60)  # раз в сутки
+
+# === ЗАПУСК ===
+# Ежедневная рассылка отключена (раскомментируйте, если нужна)
+# @dp.startup()
+# async def on_startup():
+#     global jobs_manager
+#     jobs_manager = await aiojobs.create_scheduler()
+#     await jobs_manager.spawn(daily_broadcast(bot))
+#     print("Daily broadcast task started")
+
 async def main():
-    print("🤖 Бот запущен! Нажми Ctrl+C для остановки.")
-    await dp.start_polling(bot)
+    print("🤖 Wellness Quest бот запущен...")
+    await dp.start_polling(bot, skip_updates=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
+
