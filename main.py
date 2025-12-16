@@ -1613,13 +1613,13 @@ async def invite(callback: CallbackQuery):
     ref_link = user_data[uid]["ref_link"]
     logging.info(f"invite: реферальная ссылка для {uid} = {ref_link}")
     
-    # Начисляем 1 брильянт сразу при отправке ссылки
+    # Устанавливаем баланс в 20 брильянтов при нажатии кнопки "Пригласить друга"
     if uid not in user_data:
         user_data[uid] = {"diamonds": 0}
     before = user_data[uid].get("diamonds", 0)
-    user_data[uid]["diamonds"] = clamp_points(user_data[uid].get("diamonds", 0) + 1)
+    user_data[uid]["diamonds"] = clamp_points(20)
     after = user_data[uid]["diamonds"]
-    logging.info(f"invite: начислен 1 брильянт пользователю {uid} (было {before}, стало {after})")
+    logging.info(f"invite: баланс установлен в 20 брильянтов для пользователя {uid} (было {before}, стало {after})")
     
     logging.info(f"invite: отправка реферальной ссылки для {uid}")
     await callback.message.answer(
@@ -1628,7 +1628,7 @@ async def invite(callback: CallbackQuery):
         f"   {ref_link}\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "   📤 Отправь эту ссылку другу\n"
-        "   💎 +1 брильянт за отправку ссылки!"
+        "   💎 Баланс: 20 брильянтов!"
     )
     
     await asyncio.sleep(1)
