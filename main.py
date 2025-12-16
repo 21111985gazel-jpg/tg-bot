@@ -20,14 +20,14 @@ load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 AMO_API_URL = os.getenv("AMO_API_URL")
 AMO_ACCESS_TOKEN = os.getenv("AMO_ACCESS_TOKEN")
-CHANNEL_URL = os.getenv("CHANNEL_URL")
+CHANNEL_URL = os.getenv("CHANNEL_URL") or "https://t.me/farhutdinova_guzel"  # Fallback на дефолтный канал
 CHANNEL_ID = -1003317524713  # ID канала для проверки подписки
 
 # Проверка наличия CHANNEL_URL
-if not CHANNEL_URL:
-    logging.warning(f"CHANNEL_URL не установлен в переменных окружения! Текущее значение: {repr(CHANNEL_URL)}")
+if CHANNEL_URL:
+    logging.info(f"CHANNEL_URL: {CHANNEL_URL}")
 else:
-    logging.info(f"CHANNEL_URL загружен: {CHANNEL_URL}")
+    logging.error(f"CHANNEL_URL не установлен! Текущее значение: {repr(CHANNEL_URL)}")
 REF_LINK_WOMAN = os.getenv("REF_LINK_WOMAN")
 REF_LINK_MAN = os.getenv("REF_LINK_MAN")
 CONSULTANT_LINK = os.getenv("CONSULTANT_LINK")
