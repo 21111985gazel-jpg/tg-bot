@@ -103,11 +103,24 @@ async def show_diamond_with_delay(message_or_callback, balance: int):
 # --------------------------------------------------------------------------
 async def check_subscription(user_id: int) -> bool:
     try:
+        logging.info(f"check_subscription: проверка для пользователя {user_id}, канал ID: {CHANNEL_ID}")
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        logging.info(f"check_subscription: статус пользователя {user_id} = {member.status}")
         # Проверяем статус: member, administrator, creator
-        return member.status in ["member", "administrator", "creator"]
+        is_member = member.status in ["member", "administrator", "creator"]
+        logging.info(f"check_subscription: результат для {user_id} = {is_member}")
+        return is_member
     except Exception as e:
-        print(f"Error checking subscription: {e}")
+        error_msg = str(e)
+        logging.error(f"check_subscription: ОШИБКА при проверке подписки для {user_id}: {error_msg}", exc_info=True)
+        
+        # Если канал не найден или бот не имеет доступа - разрешаем продолжить
+        # (возможно, канал недоступен или бот не добавлен в канал)
+        if "chat not found" in error_msg.lower() or "not found" in error_msg.lower():
+            logging.warning(f"check_subscription: Канал не найден или недоступен. Разрешаем продолжить для {user_id}")
+            return True  # Разрешаем продолжить, если канал недоступен
+        
+        # При других ошибках возвращаем False
         return False
 
 # --------------------------------------------------------------------------
@@ -137,6 +150,7 @@ def send_to_amocrm(user_id: int):
 @dp.message(Command("start"))
 async def start(message: Message):
     user_id = message.from_user.id
+    logging.info(f"start: команда /start от пользователя {user_id}")
     
     # Проверяем реферальную ссылку
     inviter_id = None
@@ -145,17 +159,20 @@ async def start(message: Message):
             ref_text = message.text.split()[1]
             if ref_text.startswith("ref"):
                 inviter_id = int(ref_text[3:])
+                logging.info(f"start: пользователь {user_id} пришел по реферальной ссылке от {inviter_id}")
         except ValueError:
             inviter_id = None
 
-    bot_info = await bot.get_me()
+    # Реферальная ссылка всегда ведет на основного бота @CoralClubAssistantBot
+    REF_BOT_USERNAME = "CoralClubAssistantBot"
     user_data[user_id] = {
         "diamonds": 0,
         "branch": None,
         "answers": {},
-        "ref_link": f"https://t.me/{bot_info.username}?start=ref{user_id}",
+        "ref_link": f"https://t.me/{REF_BOT_USERNAME}?start=ref{user_id}",
         "inviter_id": inviter_id
     }
+    logging.info(f"start: данные пользователя {user_id} инициализированы")
     
     # Если пришёл по реферальной ссылке
     if inviter_id and inviter_id in user_data:
@@ -163,6 +180,7 @@ async def start(message: Message):
         before = inviter.get("diamonds", 0)
         inviter["diamonds"] = clamp_points(inviter.get("diamonds", 0) + 5)
         after = inviter["diamonds"]
+        logging.info(f"start: начислено 5 брильянтов пользователю {inviter_id} (было {before}, стало {after})")
         await bot.send_message(
             inviter_id,
             text=f"🎉 Твой друг перешёл по ссылке! +5 брильянтов 💎 (было {before} → {after})"
@@ -173,10 +191,12 @@ async def start(message: Message):
     kb.button(text="💰 Хочу доход", callback_data="income")
     kb.adjust(2)
     
+    logging.info(f"start: отправка главного меню пользователю {user_id}")
     await message.answer(
         "Выбери, что тебе важнее 👇",
         reply_markup=kb.as_markup()
     )
+    logging.info(f"start: главное меню отправлено пользователю {user_id}")
 
 # ===========================================================
 # ВЕТКА — ХОЧУ ЗДОРОВЬЕ
@@ -245,7 +265,7 @@ async def health_name(message: Message, state: FSMContext):
         "Мы рады приветствовать тебя в нашей игре! 🎮"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     await message.answer("👉 Напиши свой возраст")
@@ -285,7 +305,7 @@ async def health_age(message: Message, state: FSMContext):
         "Двигаемся дальше 👇"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     # Вопрос про пол сразу после возраста
@@ -314,7 +334,7 @@ async def health_gender_after_age(callback: CallbackQuery, state: FSMContext):
         "Давай узнаем тебя получше 👇"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     await callback.message.answer("👉 Напиши свой рост (в см)")
@@ -354,7 +374,7 @@ async def health_height(message: Message, state: FSMContext):
         "Отлично! Продолжаем узнавать тебя лучше 📊"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     await message.answer("👉 Напиши свой вес (в кг)")
@@ -393,7 +413,7 @@ async def health_weight(message: Message, state: FSMContext):
         "Супер! Теперь давай определим твою цель 🎯"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -422,7 +442,7 @@ async def health_goal(callback: CallbackQuery):
         "Отличная цель! Здоровье — это основа всего 💪"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     # Начинаем блок вопросов про питание
@@ -455,7 +475,7 @@ async def health_water(callback: CallbackQuery):
         "Вода — основа жизни! Отличное начало 💧"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -488,7 +508,7 @@ async def health_food(callback: CallbackQuery):
         "Отличный выбор! Питание — ключ к здоровью 🍽"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     # Если выбрал вегетарианец - пропускаем вопрос про частоту
@@ -543,7 +563,7 @@ async def health_freq(callback: CallbackQuery):
         "Баланс в питании — залог энергии 🔋"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -575,7 +595,7 @@ async def health_veg(callback: CallbackQuery):
         "Овощи — это витамины и энергия! 🥦"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -607,7 +627,7 @@ async def health_green(callback: CallbackQuery):
         "Зелень — природный детокс! 🌿"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     # Новый вопрос про кофе/чай
@@ -641,7 +661,7 @@ async def health_drink(callback: CallbackQuery):
         "Твои привычки формируют твоё здоровье ☕"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     # Если выбрал "Не пью" или "Другое" - пропускаем вопрос про частоту
@@ -696,7 +716,7 @@ async def health_drink_freq(callback: CallbackQuery):
         "Знать свои привычки — первый шаг к улучшению 📈"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     # Вопрос про витамины/БАДы
@@ -716,61 +736,76 @@ async def health_drink_freq(callback: CallbackQuery):
 # Вопрос 7: Принимаешь витамины/БАДы
 @dp.callback_query(F.data.startswith("vitamins_"))
 async def health_vitamins(callback: CallbackQuery):
-    uid = callback.from_user.id
-    user_data[uid]["answers"]["vitamins"] = callback.data
-    user_data[uid]["diamonds"] += 1
-    
-    # Брильянт - задержка перед показом
-    await asyncio.sleep(0.7)
-    await callback.message.answer("\n\n\n          💎\n\n\n")
-    
-    await asyncio.sleep(1)
-    motivational_msg = await callback.message.answer(
-        "Витамины — твоя поддержка изнутри! 💊\n"
-        "Последний шаг 👇"
-    )
-    
-    await asyncio.sleep(5)
-    await motivational_msg.delete()
-    
-    # Финал блока - предложение подписаться с переходом в канал
-    total = user_data[uid]["diamonds"]
-    
-    # Показываем URL-кнопку для перехода в канал
-    kb = InlineKeyboardBuilder()
-    kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
-    kb.adjust(1)
-    
-    msg = await callback.message.answer(
-        f"💎 Отлично! Ты прошёл оздоровительный блок.\n"
-        f"У тебя сейчас {total} брильянтов 🌟\n\n"
-        "🔔 Подпишись на наш канал!\n"
-        "💎 После подписки общее количество брильянтов будет равно 19!\n\n"
-        "👇 Нажми на кнопку ниже:",
-        reply_markup=kb.as_markup()
-    )
-    await callback.answer()
-    
-    # Ждем 6 секунд и автоматически показываем кнопку ПРОДОЛЖИТЬ
-    await asyncio.sleep(6)
-    
-    kb2 = InlineKeyboardBuilder()
-    kb2.button(text="✅ ПРОДОЛЖИТЬ ✅", callback_data="h_sub")
-    kb2.adjust(1)
-    
-    await callback.message.answer(
-        "✅ После подписки нажми ПРОДОЛЖИТЬ:",
-        reply_markup=kb2.as_markup()
-    )
+    try:
+        uid = callback.from_user.id
+        logging.info(f"health_vitamins: вызван для пользователя {uid}, ответ: {callback.data}")
+        user_data[uid]["answers"]["vitamins"] = callback.data
+        user_data[uid]["diamonds"] += 1
+        logging.info(f"health_vitamins: брильянты для {uid} = {user_data[uid]['diamonds']}")
+        
+        # Брильянт - задержка перед показом
+        await asyncio.sleep(0.7)
+        await callback.message.answer("\n\n\n          💎\n\n\n")
+        
+        await asyncio.sleep(1)
+        motivational_msg = await callback.message.answer(
+            "Витамины — твоя поддержка изнутри! 💊\n"
+            "Последний шаг 👇"
+        )
+        
+        await asyncio.sleep(3)
+        await motivational_msg.delete()
+        
+        # Финал блока - предложение подписаться с переходом в канал
+        total = user_data[uid]["diamonds"]
+        logging.info(f"health_vitamins: показ блока подписки для {uid}, брильянтов: {total}")
+        
+        # Показываем URL-кнопку для перехода в канал
+        kb = InlineKeyboardBuilder()
+        kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
+        kb.adjust(1)
+        
+        logging.info(f"health_vitamins: отправка сообщения с кнопкой подписки для {uid}")
+        msg = await callback.message.answer(
+            f"💎 Отлично! Ты прошёл оздоровительный блок.\n"
+            f"У тебя сейчас {total} брильянтов 🌟\n\n"
+            "🔔 Подпишись на наш канал!\n"
+            "💎 После подписки общее количество брильянтов будет равно 19!\n\n"
+            "👇 Нажми на кнопку ниже:",
+            reply_markup=kb.as_markup()
+        )
+        await callback.answer()
+        logging.info(f"health_vitamins: сообщение с кнопкой подписки отправлено для {uid}")
+        
+        # Ждем 6 секунд и автоматически показываем кнопку ПРОДОЛЖИТЬ
+        logging.info(f"health_vitamins: ожидание 6 секунд перед показом кнопки ПРОДОЛЖИТЬ для {uid}")
+        await asyncio.sleep(6)
+        
+        kb2 = InlineKeyboardBuilder()
+        kb2.button(text="✅ ПРОДОЛЖИТЬ ✅", callback_data="h_sub")
+        kb2.adjust(1)
+        
+        logging.info(f"health_vitamins: отправка кнопки ПРОДОЛЖИТЬ для {uid}")
+        await callback.message.answer(
+            "✅ После подписки нажми ПРОДОЛЖИТЬ:",
+            reply_markup=kb2.as_markup()
+        )
+        logging.info(f"health_vitamins: кнопка ПРОДОЛЖИТЬ отправлена для {uid}")
+    except Exception as e:
+        logging.error(f"Ошибка в health_vitamins: {e}")
+        await callback.answer("Произошла ошибка, попробуйте позже", show_alert=True)
 
 # Старый обработчик пола удален, теперь пол спрашивается после возраста
 
 @dp.callback_query(F.data == "h_sub")
 async def health_sub(callback: CallbackQuery):
     uid = callback.from_user.id
+    logging.info(f"health_sub: вызван для пользователя {uid}")
     
     # Проверяем подписку на канал
+    logging.info(f"health_sub: проверка подписки для {uid}")
     is_subscribed = await check_subscription(uid)
+    logging.info(f"health_sub: результат проверки подписки для {uid} = {is_subscribed}")
     
     if not is_subscribed:
         # Если не подписан - показываем предупреждение
@@ -817,10 +852,10 @@ async def health_sub(callback: CallbackQuery):
     await asyncio.sleep(1.5)
     
     # 3. Первое сообщение: Вы выиграли + баланс
-    total_diamonds = user_data[uid]['diamonds']
+    # В ветке "Хочу здоровье" после подписки всегда 19 брильянтов (20-й только после приглашения друга)
     await callback.message.answer(
         f"🎉 ВЫ ВЫИГРАЛИ! 🎉\n\n"
-        f"💎 У вас {total_diamonds} брильянтов 💎"
+        f"💎 У вас 19 брильянтов 💎"
     )
     
     await asyncio.sleep(2)
@@ -922,7 +957,7 @@ async def income_name(message: Message, state: FSMContext):
         "Мы рады приветствовать тебя в нашей игре! 🎮"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     await message.answer("👉 Напиши свой возраст")
@@ -962,7 +997,7 @@ async def income_age(message: Message, state: FSMContext):
         "Двигаемся дальше 👇"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     # Вопрос про пол сразу после возраста
@@ -991,7 +1026,7 @@ async def income_gender_after_age(callback: CallbackQuery, state: FSMContext):
         "Давай узнаем тебя получше 👇"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     # Теперь спрашиваем про доход
@@ -1032,7 +1067,7 @@ async def income_desired(callback: CallbackQuery, state: FSMContext):
         "Отличная цель, амбиции — основа роста!"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -1070,7 +1105,7 @@ async def income_work_format(callback: CallbackQuery, state: FSMContext):
         "Класс, важно понимать свою зону комфорта 💫"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -1108,7 +1143,7 @@ async def income_work_style(callback: CallbackQuery, state: FSMContext):
         "Настоящий баланс формируется, когда понимаешь свои сильные стороны ⚙️"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -1148,7 +1183,7 @@ async def income_experience(callback: CallbackQuery, state: FSMContext):
         "Каждый стартует с разного уровня — главное делать шаги вперёд 🔥"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -1192,7 +1227,7 @@ async def income_sphere(callback: CallbackQuery, state: FSMContext):
         "Любая сфера — трамплин, если использовать её опыт мудро 💫"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -1234,7 +1269,7 @@ async def income_skills(callback: CallbackQuery, state: FSMContext):
         "Прокачка начинается с осознания, куда двигаться 🎯"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -1274,7 +1309,7 @@ async def income_time(callback: CallbackQuery, state: FSMContext):
         "Последовательность = результат 🔑"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -1316,7 +1351,7 @@ async def income_values(callback: CallbackQuery, state: FSMContext):
         "Ценности — это топливо твоего пути 🚀"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -1356,7 +1391,7 @@ async def income_ready(callback: CallbackQuery, state: FSMContext):
         "Отлично! Каждый шаг — ещё один уровень в игре 💎"
     )
     
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     await motivational_msg.delete()
     
     kb = InlineKeyboardBuilder()
@@ -1376,61 +1411,73 @@ async def income_ready(callback: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("need_"))
 async def income_need(callback: CallbackQuery, state: FSMContext):
-    uid = callback.from_user.id
-    
-    need_map = {
-        "need_plan": "План",
-        "need_mentor": "Наставник",
-        "need_tools": "Инструменты",
-        "need_time": "Время",
-        "need_motivation": "Мотивация"
-    }
-    
-    user_data[uid]["answers"]["need_start"] = need_map.get(callback.data, "не указано")
-    user_data[uid]["diamonds"] += 1
-    
-    # Брильянт
-    await asyncio.sleep(0.7)
-    await callback.message.answer("\n\n\n          💎\n\n\n")
-    
-    await asyncio.sleep(1)
-    motivational_msg = await callback.message.answer(
-        "Отличный выбор! Теперь последний шаг 👇"
-    )
-    
-    await asyncio.sleep(5)
-    await motivational_msg.delete()
-    
-    # Финал блока - предложение подписаться с переходом в канал
-    total = user_data[uid]["diamonds"]
-    
-    # Показываем URL-кнопку для перехода в канал
-    kb = InlineKeyboardBuilder()
-    kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
-    kb.adjust(1)
-    
-    msg = await callback.message.answer(
-        f"💎 Отлично! Ты прошёл блок карьерного развития.\n"
-        f"У тебя сейчас {total} брильянтов 🌟\n\n"
-        "🔔 Подпишись на наш канал!\n"
-        "💎 После подписки общее количество брильянтов будет равно 19!\n\n"
-        "👇 Нажми на кнопку ниже:",
-        reply_markup=kb.as_markup()
-    )
-    await callback.answer()
-    await state.clear()
-    
-    # Ждем 6 секунд и автоматически показываем кнопку ПРОДОЛЖИТЬ
-    await asyncio.sleep(6)
-    
-    kb2 = InlineKeyboardBuilder()
-    kb2.button(text="✅ ПРОДОЛЖИТЬ ✅", callback_data="inc_sub")
-    kb2.adjust(1)
-    
-    await callback.message.answer(
-        "✅ После подписки нажми ПРОДОЛЖИТЬ:",
-        reply_markup=kb2.as_markup()
-    )
+    try:
+        uid = callback.from_user.id
+        logging.info(f"income_need: вызван для пользователя {uid}, ответ: {callback.data}")
+        
+        need_map = {
+            "need_plan": "План",
+            "need_mentor": "Наставник",
+            "need_tools": "Инструменты",
+            "need_time": "Время",
+            "need_motivation": "Мотивация"
+        }
+        
+        user_data[uid]["answers"]["need_start"] = need_map.get(callback.data, "не указано")
+        user_data[uid]["diamonds"] += 1
+        logging.info(f"income_need: брильянты для {uid} = {user_data[uid]['diamonds']}")
+        
+        # Брильянт
+        await asyncio.sleep(0.7)
+        await callback.message.answer("\n\n\n          💎\n\n\n")
+        
+        await asyncio.sleep(1)
+        motivational_msg = await callback.message.answer(
+            "Отличный выбор! Теперь последний шаг 👇"
+        )
+        
+        await asyncio.sleep(3)
+        await motivational_msg.delete()
+        
+        # Финал блока - предложение подписаться с переходом в канал
+        total = user_data[uid]["diamonds"]
+        logging.info(f"income_need: показ блока подписки для {uid}, брильянтов: {total}")
+        
+        # Показываем URL-кнопку для перехода в канал
+        kb = InlineKeyboardBuilder()
+        kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
+        kb.adjust(1)
+        
+        logging.info(f"income_need: отправка сообщения с кнопкой подписки для {uid}")
+        msg = await callback.message.answer(
+            f"💎 Отлично! Ты прошёл блок карьерного развития.\n"
+            f"У тебя сейчас {total} брильянтов 🌟\n\n"
+            "🔔 Подпишись на наш канал!\n"
+            "💎 После подписки общее количество брильянтов будет равно 19!\n\n"
+            "👇 Нажми на кнопку ниже:",
+            reply_markup=kb.as_markup()
+        )
+        await callback.answer()
+        await state.clear()
+        logging.info(f"income_need: сообщение с кнопкой подписки отправлено для {uid}, состояние очищено")
+        
+        # Ждем 6 секунд и автоматически показываем кнопку ПРОДОЛЖИТЬ
+        logging.info(f"income_need: ожидание 6 секунд перед показом кнопки ПРОДОЛЖИТЬ для {uid}")
+        await asyncio.sleep(6)
+        
+        kb2 = InlineKeyboardBuilder()
+        kb2.button(text="✅ ПРОДОЛЖИТЬ ✅", callback_data="inc_sub")
+        kb2.adjust(1)
+        
+        logging.info(f"income_need: отправка кнопки ПРОДОЛЖИТЬ для {uid}")
+        await callback.message.answer(
+            "✅ После подписки нажми ПРОДОЛЖИТЬ:",
+            reply_markup=kb2.as_markup()
+        )
+        logging.info(f"income_need: кнопка ПРОДОЛЖИТЬ отправлена для {uid}")
+    except Exception as e:
+        logging.error(f"Ошибка в income_need: {e}")
+        await callback.answer("Произошла ошибка, попробуйте позже", show_alert=True)
 
 # Обработчик пола после возраста (inc_gender_after_age) уже создан выше
 # Старый обработчик inc_gender удален, так как пол теперь спрашивается после возраста
@@ -1438,9 +1485,12 @@ async def income_need(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "inc_sub")
 async def income_sub(callback: CallbackQuery):
     uid = callback.from_user.id
+    logging.info(f"income_sub: вызван для пользователя {uid}")
     
     # Проверяем подписку на канал
+    logging.info(f"income_sub: проверка подписки для {uid}")
     is_subscribed = await check_subscription(uid)
+    logging.info(f"income_sub: результат проверки подписки для {uid} = {is_subscribed}")
     
     if not is_subscribed:
         # Если не подписан - показываем предупреждение
@@ -1533,151 +1583,170 @@ async def income_sub(callback: CallbackQuery):
 @dp.callback_query(F.data == "invite")
 async def invite(callback: CallbackQuery):
     uid = callback.from_user.id
+    logging.info(f"invite: вызван для пользователя {uid}")
     ref_link = user_data[uid]["ref_link"]
+    logging.info(f"invite: реферальная ссылка для {uid} = {ref_link}")
     
+    # Начисляем 1 брильянт сразу при отправке ссылки
+    if uid not in user_data:
+        user_data[uid] = {"diamonds": 0}
+    before = user_data[uid].get("diamonds", 0)
+    user_data[uid]["diamonds"] = clamp_points(user_data[uid].get("diamonds", 0) + 1)
+    after = user_data[uid]["diamonds"]
+    logging.info(f"invite: начислен 1 брильянт пользователю {uid} (было {before}, стало {after})")
+    
+    logging.info(f"invite: отправка реферальной ссылки для {uid}")
     await callback.message.answer(
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"   🔗 Твоя реферальная ссылка:\n\n"
         f"   {ref_link}\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "   📤 Отправь эту ссылку другу\n"
-        "   💎 Получишь брильянт!"
+        "   💎 +1 брильянт за отправку ссылки!"
     )
     
     await asyncio.sleep(1)
     
     # Показываем кнопку "Забрать приз"
+    logging.info(f"invite: создание кнопки ЗАБРАТЬ ПРИЗ для {uid}")
     kb_prize = InlineKeyboardBuilder()
     kb_prize.button(text="🎁 ЗАБРАТЬ ПРИЗ", callback_data="get_prize")
     kb_prize.adjust(1)
     
+    logging.info(f"invite: отправка кнопки ЗАБРАТЬ ПРИЗ для {uid}")
     await callback.message.answer(
         "👇 Выбери действие:",
         reply_markup=kb_prize.as_markup()
     )
+    logging.info(f"invite: кнопка ЗАБРАТЬ ПРИЗ отправлена для {uid}")
     
     await callback.answer()
 
 # Обработчик кнопки "Забрать приз"
 @dp.callback_query(F.data == "get_prize")
 async def get_prize(callback: CallbackQuery):
-    uid = callback.from_user.id
-    
-    # ID канала для отправки данных
-    REPORT_CHANNEL_ID = -1003317524713
-    
-    # Словари для перевода технических значений в русский текст
-    branch_names = {
-        'health': 'Здоровье',
-        'income': 'Доход'
-    }
-    
-    goal_names = {
-        'h_goal_energy': 'Энергия',
-        'h_goal_immune': 'Иммунитет',
-        'h_goal_sleep': 'Сон',
-        'h_goal_fit': 'Похудение'
-    }
-    
-    water_names = {
-        'water_1': '1 литр',
-        'water_1_5': '1.5 литра',
-        'water_2': '2 литра',
-        'water_3': '3+ литра'
-    }
-    
-    food_names = {
-        'food_meat': 'Мясо',
-        'food_fish': 'Рыбу',
-        'food_sushi': 'Суши',
-        'food_veg': 'Вегетарианец'
-    }
-    
-    freq_names = {
-        'eat_day': 'Каждый день',
-        'eat_week': 'Раз в неделю',
-        'eat_month': 'Раз в месяц',
-        'eat_never': 'Почти не ем'
-    }
-    
-    veg_names = {
-        'veg_daily': 'Каждый день',
-        'veg_sometimes': 'Иногда',
-        'veg_rare': 'Редко',
-        'veg_no': 'Не ем'
-    }
-    
-    green_names = {
-        'green_daily': 'Каждый день',
-        'green_sometimes': 'Иногда',
-        'green_rare': 'Редко',
-        'green_no': 'Нет'
-    }
-    
-    drink_names = {
-        'drink_coffee': 'Кофе',
-        'drink_tea': 'Чай',
-        'drink_no': 'Не пью',
-        'drink_other': 'Другое'
-    }
-    
-    drink_freq_names = {
-        'daily': 'Каждый день',
-        'weekly': 'Раз в неделю',
-        'monthly': 'Раз в месяц',
-        'never': 'Почти не пью'
-    }
-    
-    vitamins_names = {
-        'vitamins_regular': 'Да, регулярно',
-        'vitamins_sometimes': 'Иногда',
-        'vitamins_rare': 'Редко',
-        'vitamins_never': 'Никогда'
-    }
-    
-    # Формируем отчет с ответами пользователя
-    user_info = user_data.get(uid, {})
-    answers = user_info.get("answers", {})
-    
-    # Переводим значения
-    branch = branch_names.get(user_info.get('branch', ''), 'Не указано')
-    goal = goal_names.get(answers.get('goal', ''), 'Не указано')
-    water = water_names.get(answers.get('water', ''), 'Не указано')
-    food = food_names.get(answers.get('food', ''), 'Не указано')
-    
-    # Частота еды может содержать префикс, поэтому ищем по концовке
-    eat_freq = answers.get('eat_freq', '')
-    eat_freq_text = 'Не указано'
-    if 'day' in eat_freq:
-        eat_freq_text = 'Каждый день'
-    elif 'week' in eat_freq:
-        eat_freq_text = 'Раз в неделю'
-    elif 'month' in eat_freq:
-        eat_freq_text = 'Раз в месяц'
-    elif 'never' in eat_freq:
-        eat_freq_text = 'Почти не ем'
-    
-    vegetables = veg_names.get(answers.get('vegetables', ''), 'Не указано')
-    greens = green_names.get(answers.get('greens', ''), 'Не указано')
-    drink = drink_names.get(answers.get('drink', ''), 'Не указано')
-    
-    # Частота напитков
-    drink_freq = answers.get('drink_freq', '')
-    drink_freq_text = 'Не указано'
-    if 'day' in drink_freq:
-        drink_freq_text = 'Каждый день'
-    elif 'week' in drink_freq:
-        drink_freq_text = 'Раз в неделю'
-    elif 'month' in drink_freq:
-        drink_freq_text = 'Раз в месяц'
-    elif 'never' in drink_freq:
-        drink_freq_text = 'Почти не пью'
-    
-    vitamins = vitamins_names.get(answers.get('vitamins', ''), 'Не указано')
-    
-    # Проверяем ветку и формируем отчет соответственно
-    if user_info.get('branch') == 'health':
-        report = f"""
+    try:
+        uid = callback.from_user.id
+        logging.info(f"get_prize вызван для пользователя {uid}")
+        
+        # ID канала для отправки данных
+        REPORT_CHANNEL_ID = -1003317524713
+        
+        # Словари для перевода технических значений в русский текст
+        branch_names = {
+            'health': 'Здоровье',
+            'income': 'Доход'
+        }
+        
+        goal_names = {
+            'h_goal_energy': 'Энергия',
+            'h_goal_immune': 'Иммунитет',
+            'h_goal_sleep': 'Сон',
+            'h_goal_fit': 'Похудение'
+        }
+        
+        water_names = {
+            'water_1': '1 литр',
+            'water_1_5': '1.5 литра',
+            'water_2': '2 литра',
+            'water_3': '3+ литра'
+        }
+        
+        food_names = {
+            'food_meat': 'Мясо',
+            'food_fish': 'Рыбу',
+            'food_sushi': 'Суши',
+            'food_veg': 'Вегетарианец'
+        }
+        
+        freq_names = {
+            'eat_day': 'Каждый день',
+            'eat_week': 'Раз в неделю',
+            'eat_month': 'Раз в месяц',
+            'eat_never': 'Почти не ем'
+        }
+        
+        veg_names = {
+            'veg_daily': 'Каждый день',
+            'veg_sometimes': 'Иногда',
+            'veg_rare': 'Редко',
+            'veg_no': 'Не ем'
+        }
+        
+        green_names = {
+            'green_daily': 'Каждый день',
+            'green_sometimes': 'Иногда',
+            'green_rare': 'Редко',
+            'green_no': 'Нет'
+        }
+        
+        drink_names = {
+            'drink_coffee': 'Кофе',
+            'drink_tea': 'Чай',
+            'drink_no': 'Не пью',
+            'drink_other': 'Другое'
+        }
+        
+        drink_freq_names = {
+            'daily': 'Каждый день',
+            'weekly': 'Раз в неделю',
+            'monthly': 'Раз в месяц',
+            'never': 'Почти не пью'
+        }
+        
+        vitamins_names = {
+            'vitamins_regular': 'Да, регулярно',
+            'vitamins_sometimes': 'Иногда',
+            'vitamins_rare': 'Редко',
+            'vitamins_never': 'Никогда'
+        }
+        
+        # Формируем отчет с ответами пользователя
+        user_info = user_data.get(uid, {})
+        logging.info(f"get_prize: user_info для {uid} = {user_info}")
+        answers = user_info.get("answers", {})
+        logging.info(f"get_prize: answers для {uid} = {answers}")
+        
+        # Переводим значения
+        branch = branch_names.get(user_info.get('branch', ''), 'Не указано')
+        logging.info(f"get_prize: branch для {uid} = {branch}")
+        goal = goal_names.get(answers.get('goal', ''), 'Не указано')
+        water = water_names.get(answers.get('water', ''), 'Не указано')
+        food = food_names.get(answers.get('food', ''), 'Не указано')
+        
+        # Частота еды может содержать префикс, поэтому ищем по концовке
+        eat_freq = answers.get('eat_freq', '')
+        eat_freq_text = 'Не указано'
+        if 'day' in eat_freq:
+            eat_freq_text = 'Каждый день'
+        elif 'week' in eat_freq:
+            eat_freq_text = 'Раз в неделю'
+        elif 'month' in eat_freq:
+            eat_freq_text = 'Раз в месяц'
+        elif 'never' in eat_freq:
+            eat_freq_text = 'Почти не ем'
+        
+        vegetables = veg_names.get(answers.get('vegetables', ''), 'Не указано')
+        greens = green_names.get(answers.get('greens', ''), 'Не указано')
+        drink = drink_names.get(answers.get('drink', ''), 'Не указано')
+        
+        # Частота напитков
+        drink_freq = answers.get('drink_freq', '')
+        drink_freq_text = 'Не указано'
+        if 'day' in drink_freq:
+            drink_freq_text = 'Каждый день'
+        elif 'week' in drink_freq:
+            drink_freq_text = 'Раз в неделю'
+        elif 'month' in drink_freq:
+            drink_freq_text = 'Раз в месяц'
+        elif 'never' in drink_freq:
+            drink_freq_text = 'Почти не пью'
+        
+        vitamins = vitamins_names.get(answers.get('vitamins', ''), 'Не указано')
+        
+        # Проверяем ветку и формируем отчет соответственно
+        if user_info.get('branch') == 'health':
+            report = f"""
 📊 НОВАЯ ЗАЯВКА НА ПРИЗ
 
 👤 Пользователь:
@@ -1713,8 +1782,8 @@ async def get_prize(callback: CallbackQuery):
 
 🔗 Реферальная ссылка: {user_info.get('ref_link', 'не указано')}
 """
-    else:  # income
-        report = f"""
+        else:  # income
+            report = f"""
 📊 НОВАЯ ЗАЯВКА НА ПРИЗ
 
 👤 Пользователь:
@@ -1750,28 +1819,45 @@ async def get_prize(callback: CallbackQuery):
 
 🔗 Реферальная ссылка: {user_info.get('ref_link', 'не указано')}
 """
-    
-    # Отправляем отчет в канал
-    try:
-        await bot.send_message(REPORT_CHANNEL_ID, report)
+        
+        logging.info(f"get_prize: отчет сформирован для {uid}, длина отчета: {len(report)} символов")
+        
+        # Отправляем отчет в канал
+        try:
+            logging.info(f"get_prize: отправка отчета в канал {REPORT_CHANNEL_ID} для {uid}")
+            await bot.send_message(REPORT_CHANNEL_ID, report)
+            logging.info(f"get_prize: отчет успешно отправлен в канал для {uid}")
+        except Exception as e:
+            logging.error(f"get_prize: ошибка отправки в канал для {uid}: {e}", exc_info=True)
+        
+        # Показываем пользователю ссылку на приз
+        gender = user_info.get("gender", "Женщина")
+        logging.info(f"get_prize: пол пользователя {uid} = {gender}")
+        ref_link_coral = REF_LINK_WOMAN if gender == "Женщина" else REF_LINK_MAN
+        logging.info(f"get_prize: ссылка на приз для {uid} = {ref_link_coral}")
+        
+        kb_prize = InlineKeyboardBuilder()
+        kb_prize.button(text="🎁 Перейти за призом", url=ref_link_coral)
+        kb_prize.adjust(1)
+        
+        logging.info(f"get_prize: отправка сообщения пользователю {uid} с кнопкой приза")
+        await callback.message.answer(
+            "🎉 Отлично! Твои данные отправлены.\n"
+            "👇 Нажми на кнопку ниже, чтобы забрать свой приз:",
+            reply_markup=kb_prize.as_markup()
+        )
+        logging.info(f"get_prize: сообщение с кнопкой успешно отправлено пользователю {uid}")
+        
+        await callback.answer()
+        logging.info(f"get_prize успешно завершен для пользователя {uid}")
     except Exception as e:
-        logging.error(f"Ошибка отправки в канал: {e}")
-    
-    # Показываем пользователю ссылку на приз
-    gender = user_info.get("gender", "Женщина")
-    ref_link_coral = REF_LINK_WOMAN if gender == "Женщина" else REF_LINK_MAN
-    
-    kb_prize = InlineKeyboardBuilder()
-    kb_prize.button(text="🎁 Перейти за призом", url=ref_link_coral)
-    kb_prize.adjust(1)
-    
-    await callback.message.answer(
-        "🎉 Отлично! Твои данные отправлены.\n"
-        "👇 Нажми на кнопку ниже, чтобы забрать свой приз:",
-        reply_markup=kb_prize.as_markup()
-    )
-    
-    await callback.answer()
+        logging.error(f"get_prize: КРИТИЧЕСКАЯ ОШИБКА для пользователя {uid}: {e}", exc_info=True)
+        logging.error(f"get_prize: тип ошибки: {type(e).__name__}")
+        logging.error(f"get_prize: traceback: {e.__traceback__}")
+        try:
+            await callback.answer("Произошла ошибка, попробуйте позже", show_alert=True)
+        except Exception as e2:
+            logging.error(f"get_prize: ошибка при отправке alert для {uid}: {e2}")
 
 @dp.callback_query(F.data == "balance")
 async def balance(callback: CallbackQuery):
@@ -1789,7 +1875,19 @@ async def consultant(callback: CallbackQuery):
 # ===========================================================
 async def main():
     print("✅ Бот запущен! Нажмите Ctrl+C для остановки.")
-    await dp.start_polling(bot)
+    # Сбрасываем webhook и ожидающие обновления перед запуском
+    try:
+        # Очистка webhook (одна попытка)
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            logging.info("Webhook очищен")
+        except Exception as e:
+            logging.warning(f"Ошибка очистки webhook: {e}")
+    except Exception as e:
+        logging.warning(f"Ошибка при подготовке: {e}")
+    
+    logging.info("Запуск polling...")
+    await dp.start_polling(bot, drop_pending_updates=True)
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -23,3 +23,7 @@ ENV/
 .DS_Store
 Thumbs.db
 
+
+# Logs
+bot.log
+*.log
