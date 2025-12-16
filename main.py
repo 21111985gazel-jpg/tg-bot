@@ -25,7 +25,9 @@ CHANNEL_ID = -1003317524713  # ID канала для проверки подп�
 
 # Проверка наличия CHANNEL_URL
 if not CHANNEL_URL:
-    logging.error("CHANNEL_URL не установлен в переменных окружения!")
+    logging.warning(f"CHANNEL_URL не установлен в переменных окружения! Текущее значение: {repr(CHANNEL_URL)}")
+else:
+    logging.info(f"CHANNEL_URL загружен: {CHANNEL_URL}")
 REF_LINK_WOMAN = os.getenv("REF_LINK_WOMAN")
 REF_LINK_MAN = os.getenv("REF_LINK_MAN")
 CONSULTANT_LINK = os.getenv("CONSULTANT_LINK")
@@ -766,23 +768,22 @@ async def health_vitamins(callback: CallbackQuery):
         
         # Показываем URL-кнопку для перехода в канал
         kb = InlineKeyboardBuilder()
-        if not CHANNEL_URL:
+        if CHANNEL_URL:
+            kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
+            kb.adjust(1)
+            button_text = "👇 Нажми на кнопку ниже:"
+            logging.info(f"health_vitamins: отправка сообщения с кнопкой подписки для {uid}, URL: {CHANNEL_URL}")
+        else:
             logging.error(f"health_vitamins: CHANNEL_URL не установлен для пользователя {uid}")
-            await callback.message.answer("❌ Ошибка: URL канала не настроен. Обратитесь к администратору.")
-            await callback.answer()
-            return
+            button_text = ""
         
-        kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
-        kb.adjust(1)
-        
-        logging.info(f"health_vitamins: отправка сообщения с кнопкой подписки для {uid}, URL: {CHANNEL_URL}")
         msg = await callback.message.answer(
             f"💎 Отлично! Ты прошёл оздоровительный блок.\n"
             f"У тебя сейчас {total} брильянтов 🌟\n\n"
             "🔔 Подпишись на наш канал!\n"
             "💎 После подписки общее количество брильянтов будет равно 19!\n\n"
-            "👇 Нажми на кнопку ниже:",
-            reply_markup=kb.as_markup()
+            f"{button_text}",
+            reply_markup=kb.as_markup() if CHANNEL_URL else None
         )
         await callback.answer()
         logging.info(f"health_vitamins: сообщение с кнопкой подписки отправлено для {uid}")
@@ -1460,23 +1461,22 @@ async def income_need(callback: CallbackQuery, state: FSMContext):
         
         # Показываем URL-кнопку для перехода в канал
         kb = InlineKeyboardBuilder()
-        if not CHANNEL_URL:
+        if CHANNEL_URL:
+            kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
+            kb.adjust(1)
+            button_text = "👇 Нажми на кнопку ниже:"
+            logging.info(f"income_need: отправка сообщения с кнопкой подписки для {uid}, URL: {CHANNEL_URL}")
+        else:
             logging.error(f"income_need: CHANNEL_URL не установлен для пользователя {uid}")
-            await callback.message.answer("❌ Ошибка: URL канала не настроен. Обратитесь к администратору.")
-            await callback.answer()
-            return
+            button_text = ""
         
-        kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
-        kb.adjust(1)
-        
-        logging.info(f"income_need: отправка сообщения с кнопкой подписки для {uid}, URL: {CHANNEL_URL}")
         msg = await callback.message.answer(
             f"💎 Отлично! Ты прошёл блок карьерного развития.\n"
             f"У тебя сейчас {total} брильянтов 🌟\n\n"
             "🔔 Подпишись на наш канал!\n"
             "💎 После подписки общее количество брильянтов будет равно 19!\n\n"
-            "👇 Нажми на кнопку ниже:",
-            reply_markup=kb.as_markup()
+            f"{button_text}",
+            reply_markup=kb.as_markup() if CHANNEL_URL else None
         )
         await callback.answer()
         await state.clear()
