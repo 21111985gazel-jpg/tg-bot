@@ -70,3 +70,4 @@ python3 set_webhook.py delete
 
 См. подробную инструкцию в `WEBHOOK_SETUP.md`
 
+
