@@ -22,6 +22,10 @@ AMO_API_URL = os.getenv("AMO_API_URL")
 AMO_ACCESS_TOKEN = os.getenv("AMO_ACCESS_TOKEN")
 CHANNEL_URL = os.getenv("CHANNEL_URL")
 CHANNEL_ID = -1003317524713  # ID канала для проверки подписки
+
+# Проверка наличия CHANNEL_URL
+if not CHANNEL_URL:
+    logging.error("CHANNEL_URL не установлен в переменных окружения!")
 REF_LINK_WOMAN = os.getenv("REF_LINK_WOMAN")
 REF_LINK_MAN = os.getenv("REF_LINK_MAN")
 CONSULTANT_LINK = os.getenv("CONSULTANT_LINK")
@@ -762,10 +766,16 @@ async def health_vitamins(callback: CallbackQuery):
         
         # Показываем URL-кнопку для перехода в канал
         kb = InlineKeyboardBuilder()
+        if not CHANNEL_URL:
+            logging.error(f"health_vitamins: CHANNEL_URL не установлен для пользователя {uid}")
+            await callback.message.answer("❌ Ошибка: URL канала не настроен. Обратитесь к администратору.")
+            await callback.answer()
+            return
+        
         kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
         kb.adjust(1)
         
-        logging.info(f"health_vitamins: отправка сообщения с кнопкой подписки для {uid}")
+        logging.info(f"health_vitamins: отправка сообщения с кнопкой подписки для {uid}, URL: {CHANNEL_URL}")
         msg = await callback.message.answer(
             f"💎 Отлично! Ты прошёл оздоровительный блок.\n"
             f"У тебя сейчас {total} брильянтов 🌟\n\n"
@@ -816,13 +826,18 @@ async def health_sub(callback: CallbackQuery):
         
         # Дополнительное сообщение с напоминанием
         kb = InlineKeyboardBuilder()
-        kb.button(text="🔔 Подписаться на канал", url=CHANNEL_URL)
+        if not CHANNEL_URL:
+            logging.error(f"health_sub: CHANNEL_URL не установлен для пользователя {uid}")
+            channel_text = "Пожалуйста, подпишись на канал!\n\n"
+        else:
+            kb.button(text="🔔 Подписаться на канал", url=CHANNEL_URL)
+            channel_text = f"Пожалуйста, подпишись на канал:\n{CHANNEL_URL}\n\n"
         kb.button(text="━━━━━━━━  ✅ ПРОДОЛЖИТЬ ✅  ━━━━━━━━", callback_data="h_sub")
         kb.adjust(1)
         
         await callback.message.answer(
             "❌ Подписка не обнаружена!\n\n"
-            f"Пожалуйста, подпишись на канал:\n{CHANNEL_URL}\n\n"
+            f"{channel_text}"
             "После подписки нажми кнопку 'ПРОДОЛЖИТЬ' снова",
             reply_markup=kb.as_markup()
         )
@@ -1445,10 +1460,16 @@ async def income_need(callback: CallbackQuery, state: FSMContext):
         
         # Показываем URL-кнопку для перехода в канал
         kb = InlineKeyboardBuilder()
+        if not CHANNEL_URL:
+            logging.error(f"income_need: CHANNEL_URL не установлен для пользователя {uid}")
+            await callback.message.answer("❌ Ошибка: URL канала не настроен. Обратитесь к администратору.")
+            await callback.answer()
+            return
+        
         kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
         kb.adjust(1)
         
-        logging.info(f"income_need: отправка сообщения с кнопкой подписки для {uid}")
+        logging.info(f"income_need: отправка сообщения с кнопкой подписки для {uid}, URL: {CHANNEL_URL}")
         msg = await callback.message.answer(
             f"💎 Отлично! Ты прошёл блок карьерного развития.\n"
             f"У тебя сейчас {total} брильянтов 🌟\n\n"
@@ -1501,13 +1522,18 @@ async def income_sub(callback: CallbackQuery):
         
         # Дополнительное сообщение с напоминанием
         kb = InlineKeyboardBuilder()
-        kb.button(text="🔔 Подписаться на канал", url=CHANNEL_URL)
+        if not CHANNEL_URL:
+            logging.error(f"income_sub: CHANNEL_URL не установлен для пользователя {uid}")
+            channel_text = "Пожалуйста, подпишись на канал!\n\n"
+        else:
+            kb.button(text="🔔 Подписаться на канал", url=CHANNEL_URL)
+            channel_text = f"Пожалуйста, подпишись на канал:\n{CHANNEL_URL}\n\n"
         kb.button(text="━━━━━━━━  ✅ ПРОДОЛЖИТЬ ✅  ━━━━━━━━", callback_data="inc_sub")
         kb.adjust(1)
         
         await callback.message.answer(
             "❌ Подписка не обнаружена!\n\n"
-            f"Пожалуйста, подпишись на канал:\n{CHANNEL_URL}\n\n"
+            f"{channel_text}"
             "После подписки нажми кнопку 'ПРОДОЛЖИТЬ' снова",
             reply_markup=kb.as_markup()
         )
