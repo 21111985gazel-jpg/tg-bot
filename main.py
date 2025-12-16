@@ -1860,17 +1860,28 @@ async def get_prize(callback: CallbackQuery):
         gender = user_info.get("gender", "Женщина")
         logging.info(f"get_prize: пол пользователя {uid} = {gender}")
         ref_link_coral = REF_LINK_WOMAN if gender == "Женщина" else REF_LINK_MAN
+        
+        # Проверяем, что ссылка установлена
+        if not ref_link_coral:
+            logging.error(f"get_prize: REF_LINK не установлен для пола {gender}, пользователя {uid}")
+            # Используем CONSULTANT_LINK как fallback или общую ссылку
+            ref_link_coral = CONSULTANT_LINK or "https://t.me/farhutdinova_guzel"
+            logging.warning(f"get_prize: используется fallback ссылка: {ref_link_coral}")
+        
         logging.info(f"get_prize: ссылка на приз для {uid} = {ref_link_coral}")
         
         kb_prize = InlineKeyboardBuilder()
-        kb_prize.button(text="🎁 Перейти за призом", url=ref_link_coral)
-        kb_prize.adjust(1)
+        if ref_link_coral:
+            kb_prize.button(text="🎁 Перейти за призом", url=ref_link_coral)
+            kb_prize.adjust(1)
+        else:
+            logging.error(f"get_prize: невозможно создать кнопку, ссылка не установлена для {uid}")
         
         logging.info(f"get_prize: отправка сообщения пользователю {uid} с кнопкой приза")
         await callback.message.answer(
             "🎉 Отлично! Твои данные отправлены.\n"
             "👇 Нажми на кнопку ниже, чтобы забрать свой приз:",
-            reply_markup=kb_prize.as_markup()
+            reply_markup=kb_prize.as_markup() if ref_link_coral else None
         )
         logging.info(f"get_prize: сообщение с кнопкой успешно отправлено пользователю {uid}")
         
