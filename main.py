@@ -766,12 +766,12 @@ async def health_vitamins(callback: CallbackQuery):
         total = user_data[uid]["diamonds"]
         logging.info(f"health_vitamins: показ блока подписки для {uid}, брильянтов: {total}")
         
-        # Показываем URL-кнопку для перехода в канал
+        # Показываем URL-кнопку для подписки на канал
         kb = InlineKeyboardBuilder()
         if CHANNEL_URL:
-            kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
+            kb.button(text="🔔 Подписаться на канал", url=CHANNEL_URL)
             kb.adjust(1)
-            button_text = "👇 Нажми на кнопку ниже:"
+            button_text = "👇 Нажми на кнопку ниже, чтобы подписаться:"
             logging.info(f"health_vitamins: отправка сообщения с кнопкой подписки для {uid}, URL: {CHANNEL_URL}")
         else:
             logging.error(f"health_vitamins: CHANNEL_URL не установлен для пользователя {uid}")
@@ -1459,12 +1459,12 @@ async def income_need(callback: CallbackQuery, state: FSMContext):
         total = user_data[uid]["diamonds"]
         logging.info(f"income_need: показ блока подписки для {uid}, брильянтов: {total}")
         
-        # Показываем URL-кнопку для перехода в канал
+        # Показываем URL-кнопку для подписки на канал
         kb = InlineKeyboardBuilder()
         if CHANNEL_URL:
-            kb.button(text="🔔 Перейти в канал", url=CHANNEL_URL)
+            kb.button(text="🔔 Подписаться на канал", url=CHANNEL_URL)
             kb.adjust(1)
-            button_text = "👇 Нажми на кнопку ниже:"
+            button_text = "👇 Нажми на кнопку ниже, чтобы подписаться:"
             logging.info(f"income_need: отправка сообщения с кнопкой подписки для {uid}, URL: {CHANNEL_URL}")
         else:
             logging.error(f"income_need: CHANNEL_URL не установлен для пользователя {uid}")
