@@ -1859,14 +1859,19 @@ async def get_prize(callback: CallbackQuery):
         # Показываем пользователю ссылку на приз
         gender = user_info.get("gender", "Женщина")
         logging.info(f"get_prize: пол пользователя {uid} = {gender}")
-        ref_link_coral = REF_LINK_WOMAN if gender == "Женщина" else REF_LINK_MAN
         
-        # Проверяем, что ссылка установлена
-        if not ref_link_coral:
-            logging.error(f"get_prize: REF_LINK не установлен для пола {gender}, пользователя {uid}")
-            # Используем CONSULTANT_LINK как fallback или общую ссылку
-            ref_link_coral = CONSULTANT_LINK or "https://t.me/farhutdinova_guzel"
-            logging.warning(f"get_prize: используется fallback ссылка: {ref_link_coral}")
+        # Определяем ссылку в зависимости от пола
+        if gender == "Женщина":
+            # Для женщин: используем REF_LINK_WOMAN или fallback на https://coral.club/8559063.html
+            ref_link_coral = REF_LINK_WOMAN or "https://coral.club/8559063.html"
+        else:
+            # Для мужчин: используем REF_LINK_MAN или fallback на https://coral.club/8701238.html
+            ref_link_coral = REF_LINK_MAN or "https://coral.club/8701238.html"
+        
+        if not REF_LINK_WOMAN and gender == "Женщина":
+            logging.warning(f"get_prize: REF_LINK_WOMAN не установлен, используется fallback для {uid}")
+        elif not REF_LINK_MAN and gender != "Женщина":
+            logging.warning(f"get_prize: REF_LINK_MAN не установлен, используется fallback для {uid}")
         
         logging.info(f"get_prize: ссылка на приз для {uid} = {ref_link_coral}")
         
