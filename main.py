@@ -117,17 +117,14 @@ async def check_subscription(user_id: int) -> bool:
         logging.info(f"check_subscription: результат для {user_id} = {is_member}")
         return is_member
     except Exception as e:
-        error_msg = str(e)
+        error_msg = str(e).lower()
         logging.error(f"check_subscription: ОШИБКА при проверке подписки для {user_id}: {error_msg}", exc_info=True)
         
-        # Если канал не найден или бот не имеет доступа - разрешаем продолжить
-        # (возможно, канал недоступен или бот не добавлен в канал)
-        if "chat not found" in error_msg.lower() or "not found" in error_msg.lower():
-            logging.warning(f"check_subscription: Канал не найден или недоступен. Разрешаем продолжить для {user_id}")
-            return True  # Разрешаем продолжить, если канал недоступен
-        
-        # При других ошибках возвращаем False
-        return False
+        # Если есть любая ошибка при проверке подписки - разрешаем продолжить
+        # Это может быть из-за отсутствия прав бота, недоступности канала и т.д.
+        # Чтобы не блокировать пользователей, разрешаем продолжить при любой ошибке
+        logging.warning(f"check_subscription: Ошибка при проверке подписки. Разрешаем продолжить для {user_id}")
+        return True  # Разрешаем продолжить при любой ошибке проверки
 
 # --------------------------------------------------------------------------
 # Отправка в AMOCRM
