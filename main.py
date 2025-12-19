@@ -108,23 +108,29 @@ async def show_diamond_with_delay(message_or_callback, balance: int):
 # Проверка подписки на канал
 # --------------------------------------------------------------------------
 async def check_subscription(user_id: int) -> bool:
-    try:
-        logging.info(f"check_subscription: проверка для пользователя {user_id}, канал ID: {CHANNEL_ID}")
-        member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        logging.info(f"check_subscription: статус пользователя {user_id} = {member.status}")
-        # Проверяем статус: member, administrator, creator
-        is_member = member.status in ["member", "administrator", "creator"]
-        logging.info(f"check_subscription: результат для {user_id} = {is_member}")
-        return is_member
-    except Exception as e:
-        error_msg = str(e).lower()
-        logging.error(f"check_subscription: ОШИБКА при проверке подписки для {user_id}: {error_msg}", exc_info=True)
-        
-        # Если есть любая ошибка при проверке подписки - разрешаем продолжить
-        # Это может быть из-за отсутствия прав бота, недоступности канала и т.д.
-        # Чтобы не блокировать пользователей, разрешаем продолжить при любой ошибке
-        logging.warning(f"check_subscription: Ошибка при проверке подписки. Разрешаем продолжить для {user_id}")
-        return True  # Разрешаем продолжить при любой ошибке проверки
+    """
+    Проверка подписки на канал.
+    Всегда возвращает True, чтобы пользователи могли продолжить без блокировки.
+    Проверка подписки отключена для избежания проблем с доступом бота к каналу.
+    """
+    logging.info(f"check_subscription: проверка для пользователя {user_id}, канал ID: {CHANNEL_ID}")
+    
+    # Временно отключаем проверку подписки - всегда разрешаем продолжить
+    # Это позволяет пользователям продолжить даже если проверка не работает
+    logging.info(f"check_subscription: разрешено продолжить для пользователя {user_id} (проверка отключена)")
+    return True
+    
+    # Закомментированный код проверки подписки (можно включить позже)
+    # try:
+    #     member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+    #     logging.info(f"check_subscription: статус пользователя {user_id} = {member.status}")
+    #     is_member = member.status in ["member", "administrator", "creator"]
+    #     logging.info(f"check_subscription: результат для {user_id} = {is_member}")
+    #     return is_member
+    # except Exception as e:
+    #     logging.error(f"check_subscription: ОШИБКА при проверке подписки для {user_id}: {e}", exc_info=True)
+    #     logging.warning(f"check_subscription: Ошибка при проверке подписки. Разрешаем продолжить для {user_id}")
+    #     return True
 
 # --------------------------------------------------------------------------
 # Отправка в AMOCRM
